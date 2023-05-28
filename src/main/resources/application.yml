@@ -9,3 +9,9 @@ spring:
 springdoc:
   swagger-ui:
     path: /
+
+event-hub:
+  namespace: eventhack.servicebus.windows.net
+  key-name: hack
+  key-value: HeHeVaVqyVkntO2FnjQcs2IIh/4MUDo4y+AEhKp8z+g=
+  name: simulacoes
