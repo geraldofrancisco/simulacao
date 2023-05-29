@@ -18,5 +18,5 @@ public interface ProdutoRepository extends JpaRepository<Produto, Long> {
     Optional<Produto> buscaPorValoresMinimoEMaximo(BigDecimal valor);
 
     @Query("SELECT p FROM Produto p WHERE p.maxValor is null")
-    Produto buscaSemValorMaximo();
+    Optional<Produto> buscaSemValorMaximo();
 }

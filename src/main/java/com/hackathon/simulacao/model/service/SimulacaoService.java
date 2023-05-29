@@ -106,7 +106,9 @@ public class SimulacaoService {
         if (valorDesejado.compareTo(maximo) == -1L)
             return repository.buscaPorValoresMinimoEMaximo(valorDesejado)
                     .orElseThrow(() -> new RegraNegocioException("Produto não encontrado"));
-        return repository.buscaSemValorMaximo();
+
+        return repository.buscaSemValorMaximo()
+                .orElseThrow(() -> new RegraNegocioException("Produto não encontrado"));
     }
 
     private void validaValorMinimo(BigDecimal valorDesejado, BigDecimal minimo) {
