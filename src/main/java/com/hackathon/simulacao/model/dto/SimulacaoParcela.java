@@ -12,7 +12,7 @@ import java.math.BigDecimal;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class SimulacaoParcelas {
+public class SimulacaoParcela {
     @Schema(description = "número da parcela")
     private Integer numero;
 

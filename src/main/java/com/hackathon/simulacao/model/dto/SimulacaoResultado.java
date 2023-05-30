@@ -18,5 +18,5 @@ public class SimulacaoResultado {
     private TipoTabelaCorrecaoMonetaria tipo;
 
     @Schema(description = "valores das parcelas")
-    private List<SimulacaoParcelas> parcelas;
+    private List<SimulacaoParcela> parcelas;
 }

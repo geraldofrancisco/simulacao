@@ -3,32 +3,34 @@ package com.hackathon.simulacao.model.service;
 import com.azure.identity.AzureAuthorityHosts;
 import com.azure.identity.DefaultAzureCredential;
 import com.azure.identity.DefaultAzureCredentialBuilder;
-import com.azure.messaging.eventhubs.EventData;
 import com.azure.messaging.eventhubs.EventHubClientBuilder;
 import com.azure.messaging.eventhubs.EventHubProducerClient;
-import com.azure.messaging.eventhubs.models.SendOptions;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hackathon.simulacao.enumerable.TipoTabelaCorrecaoMonetaria;
 import com.hackathon.simulacao.exception.RegraNegocioException;
 import com.hackathon.simulacao.model.Produto;
-import com.hackathon.simulacao.model.dto.SimulacaoParcelas;
+import com.hackathon.simulacao.model.dto.SimulacaoParcela;
 import com.hackathon.simulacao.model.dto.SimulacaoRequest;
 import com.hackathon.simulacao.model.dto.SimulacaoResponse;
 import com.hackathon.simulacao.model.dto.SimulacaoResultado;
 import com.hackathon.simulacao.repository.ProdutoRepository;
 import com.hackathon.simulacao.util.JsonUtil;
 import lombok.RequiredArgsConstructor;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.math.MathContext;
+import java.math.RoundingMode;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.stream.IntStream;
 
 import static com.hackathon.simulacao.enumerable.TipoTabelaCorrecaoMonetaria.PRICE;
 import static com.hackathon.simulacao.enumerable.TipoTabelaCorrecaoMonetaria.SAC;
+import static java.math.BigDecimal.ONE;
+import static java.math.BigDecimal.ZERO;
+import static java.math.RoundingMode.HALF_UP;
 import static java.util.List.of;
 import static java.util.Objects.nonNull;
 
@@ -62,9 +64,8 @@ public class SimulacaoService {
 
     private void enviaParaFila(SimulacaoResponse calculo) {
         var json = JsonUtil.ObjectToString(calculo);
-        log.info(json);
         var producer = client();
-       // producer.send(List.of(new EventData(json)));
+        // producer.send(List.of(new EventData(json)));
         producer.close();
     }
 
@@ -80,18 +81,58 @@ public class SimulacaoService {
                 .build();
     }
 
-    private SimulacaoResultado calculaPRICE(Produto produto, SimulacaoRequest valorDesejado) {
-        return SimulacaoResultado.builder()
-                .tipo(PRICE)
-                .parcelas(of(SimulacaoParcelas.builder().build()))
-                .build();
+    private SimulacaoResultado calculaPRICE(Produto produto, SimulacaoRequest request) {
+        var resposta = buscaDefault(request, PRICE);
+        if (request.prazoEMaiorQueZero()) {
+            var valorPrestacao = calculaValorPrestacaoPRICE(request, produto.getTaxaJuros()).setScale(2, HALF_UP);
+            resposta.parcelas(geraPrestacoesPRICE(request, produto, valorPrestacao));
+        }
+        return resposta.build();
     }
 
-    private SimulacaoResultado calculaSAC(Produto produto, SimulacaoRequest valorDesejado) {
+    private List<SimulacaoParcela> geraPrestacoesPRICE(SimulacaoRequest request, Produto produto, BigDecimal valorPrestacao) {
+        var saldoDevedor = new AtomicReference<>(request.getValorDesejado());
+        return IntStream.range(1, request.getPrazo() + 1)
+                .mapToObj(parcela -> {
+                    var juroParcela = saldoDevedor.get().multiply(produto.getTaxaJuros()).setScale(2, RoundingMode.CEILING);
+                    var valorAmortizacao = valorPrestacao.subtract(juroParcela);
+                    saldoDevedor.set(saldoDevedor.get().subtract(valorAmortizacao));
+                    return SimulacaoParcela.builder()
+                            .numero(parcela)
+                            .valorJuros(juroParcela)
+                            .valorAmortizacao(valorAmortizacao)
+                            .valorPrestacao(valorAmortizacao.add(juroParcela))
+                            .build();
+                })
+                .toList();
+    }
+
+    private static SimulacaoResultado.SimulacaoResultadoBuilder buscaDefault(SimulacaoRequest request, TipoTabelaCorrecaoMonetaria tipo) {
         return SimulacaoResultado.builder()
-                .tipo(SAC)
-                .parcelas(of(SimulacaoParcelas.builder().build()))
-                .build();
+                .tipo(tipo)
+                .parcelas(of(
+                                SimulacaoParcela.builder()
+                                        .valorPrestacao(request.getValorDesejado())
+                                        .numero(1)
+                                        .valorJuros(ZERO)
+                                        .valorAmortizacao(request.getValorDesejado())
+                                        .build()
+                        )
+                );
+    }
+
+    private BigDecimal calculaValorPrestacaoPRICE(SimulacaoRequest request, BigDecimal taxaJuros) {
+        var jurosExponencial = taxaJuros.add(ONE).pow(request.getPrazo()).setScale(6, HALF_UP);
+        var primeiraParte = jurosExponencial.multiply(taxaJuros).setScale(6, HALF_UP);
+        var segundaParte = jurosExponencial.subtract(ONE);
+
+        return request.getValorDesejado().multiply(primeiraParte.divide(segundaParte, new MathContext(6)));
+    }
+
+    private SimulacaoResultado calculaSAC(Produto produto, SimulacaoRequest request) {
+        var resposta = buscaDefault(request, SAC);
+
+        return resposta.build();
     }
 
     private void validaPrazo(Produto produto, Integer prazo) {

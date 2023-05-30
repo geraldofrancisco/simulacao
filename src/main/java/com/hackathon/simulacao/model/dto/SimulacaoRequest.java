@@ -1,5 +1,6 @@
 package com.hackathon.simulacao.model.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -20,4 +21,9 @@ public class SimulacaoRequest {
 
     @NotNull(message = "O prazo deve ser informado")
     private Integer prazo;
+
+    @JsonIgnore
+    public boolean prazoEMaiorQueZero() {
+        return prazo > 0;
+    }
 }
