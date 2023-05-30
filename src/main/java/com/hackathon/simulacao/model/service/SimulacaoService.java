@@ -83,8 +83,13 @@ public class SimulacaoService {
 
     private SimulacaoResultado calculaPRICE(Produto produto, SimulacaoRequest request) {
         var resposta = buscaDefault(request, PRICE);
-        if (request.prazoEMaiorQueZero())
-            resposta.parcelas(geraPrestacoesPRICE(request, produto));
+        if (request.prazoEMaiorQueZero()){
+            var parcelas = geraPrestacoesPRICE(request, produto);
+            resposta
+                    .parcelas(parcelas)
+                    .valorTotalParcelas(parcelas.stream().map(SimulacaoParcela::getValorPrestacao).reduce(ZERO, BigDecimal::add));
+        }
+
         return resposta.build();
     }
 
@@ -130,8 +135,13 @@ public class SimulacaoService {
 
     private SimulacaoResultado calculaSAC(Produto produto, SimulacaoRequest request) {
         var resposta = buscaDefault(request, SAC);
-        if (request.prazoEMaiorQueZero())
-            resposta.parcelas(geraPrestacoesSAC(request, produto));
+        if (request.prazoEMaiorQueZero()){
+            var parcelas = geraPrestacoesSAC(request, produto);
+            resposta
+                    .parcelas(parcelas)
+                    .valorTotalParcelas(parcelas.stream().map(SimulacaoParcela::getValorPrestacao).reduce(ZERO, BigDecimal::add));
+        }
+
         return resposta.build();
     }
 
