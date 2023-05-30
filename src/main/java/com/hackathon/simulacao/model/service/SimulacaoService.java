@@ -21,7 +21,6 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.MathContext;
-import java.math.RoundingMode;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.IntStream;
@@ -30,6 +29,7 @@ import static com.hackathon.simulacao.enumerable.TipoTabelaCorrecaoMonetaria.PRI
 import static com.hackathon.simulacao.enumerable.TipoTabelaCorrecaoMonetaria.SAC;
 import static java.math.BigDecimal.ONE;
 import static java.math.BigDecimal.ZERO;
+import static java.math.RoundingMode.CEILING;
 import static java.math.RoundingMode.HALF_UP;
 import static java.util.List.of;
 import static java.util.Objects.nonNull;
@@ -83,25 +83,24 @@ public class SimulacaoService {
 
     private SimulacaoResultado calculaPRICE(Produto produto, SimulacaoRequest request) {
         var resposta = buscaDefault(request, PRICE);
-        if (request.prazoEMaiorQueZero()) {
-            var valorPrestacao = calculaValorPrestacaoPRICE(request, produto.getTaxaJuros()).setScale(2, HALF_UP);
-            resposta.parcelas(geraPrestacoesPRICE(request, produto, valorPrestacao));
-        }
+        if (request.prazoEMaiorQueZero())
+            resposta.parcelas(geraPrestacoesPRICE(request, produto));
         return resposta.build();
     }
 
-    private List<SimulacaoParcela> geraPrestacoesPRICE(SimulacaoRequest request, Produto produto, BigDecimal valorPrestacao) {
+    private List<SimulacaoParcela> geraPrestacoesPRICE(SimulacaoRequest request, Produto produto) {
+        var valorPrestacao = calculaValorPrestacaoPRICE(request, produto.getTaxaJuros()).setScale(2, HALF_UP);
         var saldoDevedor = new AtomicReference<>(request.getValorDesejado());
         return IntStream.range(1, request.getPrazo() + 1)
                 .mapToObj(parcela -> {
-                    var juroParcela = saldoDevedor.get().multiply(produto.getTaxaJuros()).setScale(2, RoundingMode.CEILING);
-                    var valorAmortizacao = valorPrestacao.subtract(juroParcela);
+                    var jurosParcela = saldoDevedor.get().multiply(produto.getTaxaJuros()).setScale(2, CEILING);
+                    var valorAmortizacao = valorPrestacao.subtract(jurosParcela);
                     saldoDevedor.set(saldoDevedor.get().subtract(valorAmortizacao));
                     return SimulacaoParcela.builder()
                             .numero(parcela)
-                            .valorJuros(juroParcela)
+                            .valorJuros(jurosParcela)
                             .valorAmortizacao(valorAmortizacao)
-                            .valorPrestacao(valorAmortizacao.add(juroParcela))
+                            .valorPrestacao(valorAmortizacao.add(jurosParcela))
                             .build();
                 })
                 .toList();
@@ -125,14 +124,32 @@ public class SimulacaoService {
         var jurosExponencial = taxaJuros.add(ONE).pow(request.getPrazo()).setScale(6, HALF_UP);
         var primeiraParte = jurosExponencial.multiply(taxaJuros).setScale(6, HALF_UP);
         var segundaParte = jurosExponencial.subtract(ONE);
-
-        return request.getValorDesejado().multiply(primeiraParte.divide(segundaParte, new MathContext(6)));
+        return request.getValorDesejado()
+                .multiply(primeiraParte.divide(segundaParte, new MathContext(6)));
     }
 
     private SimulacaoResultado calculaSAC(Produto produto, SimulacaoRequest request) {
         var resposta = buscaDefault(request, SAC);
-
+        if (request.prazoEMaiorQueZero())
+            resposta.parcelas(geraPrestacoesSAC(request, produto));
         return resposta.build();
+    }
+
+    private List<SimulacaoParcela> geraPrestacoesSAC(SimulacaoRequest request, Produto produto) {
+        var saldoDevedor = new AtomicReference<>(request.getValorDesejado());
+        var valorAmortizacao = request.getValorDesejado()
+                .divide(BigDecimal.valueOf(request.getPrazo()), new MathContext(10)).setScale(2, CEILING);
+        return IntStream.range(1, request.getPrazo() + 1)
+                .mapToObj(parcela -> {
+                    saldoDevedor.set(saldoDevedor.get().subtract(valorAmortizacao));
+                    var jurosParcela = saldoDevedor.get().multiply(produto.getTaxaJuros()).setScale(2, CEILING);
+                    return SimulacaoParcela.builder()
+                            .numero(parcela)
+                            .valorJuros(jurosParcela)
+                            .valorAmortizacao(valorAmortizacao)
+                            .valorPrestacao(valorAmortizacao.add(jurosParcela).setScale(2, CEILING))
+                            .build();
+                }).toList();
     }
 
     private void validaPrazo(Produto produto, Integer prazo) {
