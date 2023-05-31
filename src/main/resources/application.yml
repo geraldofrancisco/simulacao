@@ -4,7 +4,7 @@ spring:
     username: hack
     password: Password23
   jpa:
-    show-sql: true
+    show-sql: false
 
 springdoc:
   swagger-ui:
