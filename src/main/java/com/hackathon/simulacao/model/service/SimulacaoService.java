@@ -3,6 +3,7 @@ package com.hackathon.simulacao.model.service;
 import com.azure.identity.AzureAuthorityHosts;
 import com.azure.identity.DefaultAzureCredential;
 import com.azure.identity.DefaultAzureCredentialBuilder;
+import com.azure.messaging.eventhubs.EventData;
 import com.azure.messaging.eventhubs.EventHubClientBuilder;
 import com.azure.messaging.eventhubs.EventHubProducerClient;
 import com.hackathon.simulacao.enumerable.TipoTabelaCorrecaoMonetaria;
@@ -65,7 +66,7 @@ public class SimulacaoService {
     private void enviaParaFila(SimulacaoResponse calculo) {
         var json = JsonUtil.ObjectToString(calculo);
         var producer = client();
-        // producer.send(List.of(new EventData(json)));
+        producer.send(List.of(new EventData(json)));
         producer.close();
     }
 
